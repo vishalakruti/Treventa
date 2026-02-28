@@ -666,6 +666,12 @@ async def request_participation(request: ParticipationRequest, user: dict = Depe
 async def get_my_participations(user: dict = Depends(get_current_user)):
     """Get user's participation requests"""
     participations = await db.participations.find({"investor_id": user["id"]}).to_list(100)
+    
+    # Clean MongoDB _id fields
+    for p in participations:
+        if "_id" in p:
+            del p["_id"]
+    
     return participations
 
 @api_router.post("/admin/participations/{participation_id}/approve")
