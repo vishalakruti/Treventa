@@ -9,6 +9,7 @@ import {
   Platform,
   ScrollView,
   Alert,
+  Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -23,10 +24,23 @@ export default function LoginScreen() {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  
+  // OTP Modal state
+  const [showOTPModal, setShowOTPModal] = useState(false);
+  const [mockedOTP, setMockedOTP] = useState('');
+
+  const showAlert = (title: string, message: string, onOk?: () => void) => {
+    if (Platform.OS === 'web') {
+      window.alert(`${title}\n\n${message}`);
+      if (onOk) onOk();
+    } else {
+      Alert.alert(title, message, [{ text: 'OK', onPress: onOk }]);
+    }
+  };
 
   const handleLogin = async () => {
     if (!email || !password) {
-      Alert.alert('Error', 'Please enter email and password');
+      showAlert('Error', 'Please enter email and password');
       return;
     }
 
@@ -34,22 +48,24 @@ export default function LoginScreen() {
     try {
       const result = await login(email, password);
       if (result.requires_2fa) {
-        // MOCKED: Show OTP in alert for demo purposes
+        // Show OTP in modal for demo purposes
         if (result.mocked_otp) {
-          Alert.alert(
-            '2FA Verification',
-            `Your OTP code is: ${result.mocked_otp}\n\n(This is shown for demo purposes. In production, check your email.)`,
-            [{ text: 'OK', onPress: () => router.push({ pathname: '/(auth)/verify-otp', params: { email } }) }]
-          );
+          setMockedOTP(result.mocked_otp);
+          setShowOTPModal(true);
         } else {
           router.push({ pathname: '/(auth)/verify-otp', params: { email } });
         }
       }
     } catch (error: any) {
-      Alert.alert('Login Failed', error.response?.data?.detail || 'Invalid credentials');
+      showAlert('Login Failed', error.response?.data?.detail || 'Invalid credentials');
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleOTPModalContinue = () => {
+    setShowOTPModal(false);
+    router.push({ pathname: '/(auth)/verify-otp', params: { email } });
   };
 
   return (
@@ -136,6 +152,28 @@ export default function LoginScreen() {
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
+
+      {/* OTP Modal */}
+      <Modal visible={showOTPModal} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalIconContainer}>
+              <Ionicons name="shield-checkmark" size={48} color="#C9A227" />
+            </View>
+            <Text style={styles.modalTitle}>2FA Verification</Text>
+            <Text style={styles.modalMessage}>Your OTP code is:</Text>
+            <View style={styles.otpDisplay}>
+              <Text style={styles.otpCode}>{mockedOTP}</Text>
+            </View>
+            <Text style={styles.modalNote}>
+              (This is shown for demo purposes. In production, check your email.)
+            </Text>
+            <TouchableOpacity style={styles.modalButton} onPress={handleOTPModalContinue}>
+              <Text style={styles.modalButtonText}>Continue to Verify</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -264,5 +302,70 @@ const styles = StyleSheet.create({
     color: '#718096',
     marginLeft: 6,
     letterSpacing: 1,
+  },
+  // Modal styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.8)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  modalContent: {
+    backgroundColor: '#1A2332',
+    borderRadius: 20,
+    padding: 32,
+    alignItems: 'center',
+    width: '100%',
+    maxWidth: 340,
+  },
+  modalIconContainer: {
+    marginBottom: 16,
+  },
+  modalTitle: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    marginBottom: 8,
+  },
+  modalMessage: {
+    fontSize: 14,
+    color: '#A0AEC0',
+    marginBottom: 16,
+  },
+  otpDisplay: {
+    backgroundColor: 'rgba(201,162,39,0.1)',
+    borderWidth: 2,
+    borderColor: '#C9A227',
+    borderRadius: 12,
+    paddingHorizontal: 32,
+    paddingVertical: 16,
+    marginBottom: 16,
+  },
+  otpCode: {
+    fontSize: 32,
+    fontWeight: '800',
+    color: '#C9A227',
+    letterSpacing: 8,
+  },
+  modalNote: {
+    fontSize: 12,
+    color: '#718096',
+    textAlign: 'center',
+    marginBottom: 24,
+    lineHeight: 18,
+  },
+  modalButton: {
+    backgroundColor: '#C9A227',
+    borderRadius: 12,
+    paddingHorizontal: 32,
+    paddingVertical: 14,
+    width: '100%',
+  },
+  modalButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '700',
+    textAlign: 'center',
   },
 });
