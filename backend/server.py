@@ -584,14 +584,24 @@ async def get_project(project_id: str, user: dict = Depends(get_current_user)):
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
     
+    # Remove MongoDB _id field
+    if "_id" in project:
+        del project["_id"]
+    
     # Get latest financial data
     financial = await db.financial_ledger.find_one(
         {"project_id": project_id},
         sort=[("created_at", -1)]
     )
     
+    if financial and "_id" in financial:
+        del financial["_id"]
+    
     # Get cap table summary
     cap_table = await db.cap_tables.find_one({"project_id": project_id})
+    
+    if cap_table and "_id" in cap_table:
+        del cap_table["_id"]
     
     return {
         **project,
