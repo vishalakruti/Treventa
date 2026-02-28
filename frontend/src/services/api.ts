@@ -4,12 +4,13 @@ import Constants from 'expo-constants';
 import { Platform } from 'react-native';
 
 const getBaseUrl = () => {
+  // Try multiple sources for the backend URL
   const backendUrl = Constants.expoConfig?.extra?.backendUrl || 
-                     process.env.EXPO_PUBLIC_BACKEND_URL;
-  if (!backendUrl) {
-    console.warn('EXPO_PUBLIC_BACKEND_URL is not set');
-  }
-  return backendUrl || '';
+                     process.env.EXPO_PUBLIC_BACKEND_URL ||
+                     (typeof window !== 'undefined' ? window.location.origin : '');
+  
+  console.log('Backend URL:', backendUrl);
+  return backendUrl;
 };
 
 const api = axios.create({
