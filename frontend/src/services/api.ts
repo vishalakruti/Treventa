@@ -5,9 +5,11 @@ import { Platform } from 'react-native';
 
 const getBaseUrl = () => {
   const backendUrl = Constants.expoConfig?.extra?.backendUrl || 
-                     process.env.EXPO_PUBLIC_BACKEND_URL || 
-                     'https://private-capital-1.preview.emergentagent.com';
-  return backendUrl;
+                     process.env.EXPO_PUBLIC_BACKEND_URL;
+  if (!backendUrl) {
+    console.warn('EXPO_PUBLIC_BACKEND_URL is not set');
+  }
+  return backendUrl || '';
 };
 
 const api = axios.create({
