@@ -101,3 +101,207 @@
 #====================================================================================================
 # Testing Data - Main Agent and testing sub agent both should log testing data below this section
 #====================================================================================================
+
+user_problem_statement: "Build TREVENTA VENTURES - Private Capital Circle - An institutional-grade, invite-only private capital management mobile application with JWT auth, 2FA OTP (MOCKED), KYC, ventures management, cap table, governance voting, distributions, and portfolio tracking."
+
+backend:
+  - task: "Auth - Login with 2FA OTP (MOCKED)"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: true
+        agent: "main"
+        comment: "Login returns mocked OTP, verify-otp returns JWT token. Tested via curl."
+
+  - task: "Auth - Register with Invite Code"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: true
+        agent: "main"
+        comment: "Registration requires invite code. Demo code: DEMO2025"
+
+  - task: "Projects CRUD"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: true
+        agent: "main"
+        comment: "List projects returns 3 seeded ventures. Get project by ID works."
+
+  - task: "KYC Document Upload"
+    implemented: true
+    working: NA
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "medium"
+    needs_retesting: true
+    status_history:
+      - working: NA
+        agent: "main"
+        comment: "Endpoint implemented, needs testing with auth"
+
+  - task: "Participation Request"
+    implemented: true
+    working: NA
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "medium"
+    needs_retesting: true
+    status_history:
+      - working: NA
+        agent: "main"
+        comment: "Endpoint implemented with cap table integration"
+
+  - task: "Portfolio Summary"
+    implemented: true
+    working: NA
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "medium"
+    needs_retesting: true
+    status_history:
+      - working: NA
+        agent: "main"
+        comment: "Endpoint implemented, calculates valuations and distributions"
+
+  - task: "Governance Voting"
+    implemented: true
+    working: NA
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "medium"
+    needs_retesting: true
+    status_history:
+      - working: NA
+        agent: "main"
+        comment: "Vote creation and casting implemented"
+
+  - task: "Distributions"
+    implemented: true
+    working: NA
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "medium"
+    needs_retesting: true
+    status_history:
+      - working: NA
+        agent: "main"
+        comment: "Distribution creation with waterfall calculation implemented"
+
+frontend:
+  - task: "Login Screen with 2FA"
+    implemented: true
+    working: NA
+    file: "/app/frontend/app/(auth)/login.tsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: NA
+        agent: "main"
+        comment: "TREVENTA branded login with email/password and 2FA flow"
+
+  - task: "Registration Screen"
+    implemented: true
+    working: NA
+    file: "/app/frontend/app/(auth)/register.tsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: NA
+        agent: "main"
+        comment: "Registration with invite code validation"
+
+  - task: "Dashboard Screen"
+    implemented: true
+    working: NA
+    file: "/app/frontend/app/(tabs)/index.tsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: NA
+        agent: "main"
+        comment: "Stats cards, sector allocation chart, recent activity"
+
+  - task: "Ventures List"
+    implemented: true
+    working: NA
+    file: "/app/frontend/app/(tabs)/ventures.tsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: NA
+        agent: "main"
+        comment: "Project cards with filters by sector and status"
+
+  - task: "Venture Detail Page"
+    implemented: true
+    working: NA
+    file: "/app/frontend/app/venture/[id].tsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: NA
+        agent: "main"
+        comment: "Overview, financials, cap table, votes, documents tabs"
+
+  - task: "Portfolio Screen"
+    implemented: true
+    working: NA
+    file: "/app/frontend/app/(tabs)/portfolio.tsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: NA
+        agent: "main"
+        comment: "Holdings and distributions tabs"
+
+  - task: "Onboarding Flow"
+    implemented: true
+    working: NA
+    file: "/app/frontend/app/onboarding.tsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: NA
+        agent: "main"
+        comment: "KYC upload, bank details, NDA, risk acknowledgment"
+
+metadata:
+  created_by: "main_agent"
+  version: "1.0"
+  test_sequence: 1
+  run_ui: false
+
+test_plan:
+  current_focus:
+    - "Auth - Login with 2FA OTP (MOCKED)"
+    - "Projects CRUD"
+    - "Login Screen with 2FA"
+    - "Dashboard Screen"
+  stuck_tasks: []
+  test_all: false
+  test_priority: "high_first"
+
+agent_communication:
+  - agent: "main"
+    message: "Initial MVP implementation complete. Backend has full API coverage for auth, projects, participations, cap table, distributions, voting, KYC, and portfolio. Frontend has all screens implemented with dark institutional theme. Demo credentials: admin@treventa.com / admin123, Demo invite code: DEMO2025. Please test high priority items first."
