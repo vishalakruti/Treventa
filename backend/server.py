@@ -417,7 +417,10 @@ async def create_invite(invite: InviteCreate, admin: dict = Depends(require_admi
 @api_router.get("/admin/users")
 async def list_users(admin: dict = Depends(require_admin)):
     """List all users"""
-    users = await db.users.find().to_list(1000)
+    users = await db.users.find(
+        {},
+        {"id": 1, "email": 1, "full_name": 1, "role": 1, "is_approved": 1, "kyc_status": 1, "created_at": 1, "_id": 0}
+    ).to_list(1000)
     return [{
         "id": u["id"],
         "email": u["email"],
@@ -564,7 +567,12 @@ async def create_project(project: ProjectCreate, admin: dict = Depends(require_a
 @api_router.get("/projects")
 async def list_projects(user: dict = Depends(get_current_user)):
     """List all ventures"""
-    projects = await db.projects.find().to_list(100)
+    projects = await db.projects.find(
+        {},
+        {"id": 1, "name": 1, "sector": 1, "description": 1, "capital_required": 1, 
+         "minimum_participation": 1, "timeline": 1, "risk_level": 1, "status": 1, 
+         "total_raised": 1, "investor_count": 1, "_id": 0}
+    ).to_list(100)
     return [{
         "id": p["id"],
         "name": p["name"],
@@ -993,27 +1001,73 @@ async def get_portfolio_summary(user: dict = Depends(get_current_user)):
         "status": "approved"
     }).to_list(100)
     
+    if not participations:
+        return {
+            "summary": {
+                "total_capital_deployed": 0,
+                "current_portfolio_valuation": 0,
+                "net_gain_loss": 0,
+                "distributed_capital": 0,
+                "active_ventures": 0
+            },
+            "portfolio_items": [],
+            "sector_allocation": []
+        }
+    
+    # Batch fetch all related data to avoid N+1 queries
+    project_ids = list(set([p["project_id"] for p in participations]))
+    
+    # Fetch all projects, cap tables, financials, and distributions in batch
+    projects_list = await db.projects.find(
+        {"id": {"$in": project_ids}},
+        {"id": 1, "name": 1, "sector": 1, "status": 1, "_id": 0}
+    ).to_list(100)
+    projects_map = {p["id"]: p for p in projects_list}
+    
+    cap_tables_list = await db.cap_tables.find({"project_id": {"$in": project_ids}}).to_list(100)
+    cap_tables_map = {c["project_id"]: c for c in cap_tables_list}
+    
+    # Get latest financials for each project using aggregation
+    financials_pipeline = [
+        {"$match": {"project_id": {"$in": project_ids}}},
+        {"$sort": {"created_at": -1}},
+        {"$group": {"_id": "$project_id", "latest": {"$first": "$$ROOT"}}}
+    ]
+    financials_list = await db.financial_ledger.aggregate(financials_pipeline).to_list(100)
+    financials_map = {f["_id"]: f["latest"] for f in financials_list}
+    
+    # Fetch all distributions for user
+    distributions_list = await db.distributions.find({
+        "project_id": {"$in": project_ids},
+        "investor_distributions.investor_id": user["id"]
+    }).to_list(500)
+    
+    # Group distributions by project
+    distributions_map = {}
+    for d in distributions_list:
+        pid = d["project_id"]
+        if pid not in distributions_map:
+            distributions_map[pid] = []
+        distributions_map[pid].append(d)
+    
     total_deployed = 0
     current_valuation = 0
     realized_profit = 0
     portfolio_items = []
     
     for p in participations:
-        project = await db.projects.find_one({"id": p["project_id"]})
+        project = projects_map.get(p["project_id"])
         if not project:
             continue
         
         # Get cap table entry
-        cap_table = await db.cap_tables.find_one({"project_id": p["project_id"]})
+        cap_table = cap_tables_map.get(p["project_id"])
         user_entry = None
         if cap_table:
             user_entry = next((e for e in cap_table.get("entries", []) if e["investor_id"] == user["id"]), None)
         
         # Get latest financials
-        financial = await db.financial_ledger.find_one(
-            {"project_id": p["project_id"]},
-            sort=[("created_at", -1)]
-        )
+        financial = financials_map.get(p["project_id"])
         
         # Calculate current value based on valuation
         equity_pct = user_entry["equity_percentage"] if user_entry else 0
@@ -1021,10 +1075,7 @@ async def get_portfolio_summary(user: dict = Depends(get_current_user)):
         current_value = (equity_pct / 100) * project_valuation if project_valuation > 0 else p["amount"]
         
         # Get distributions
-        user_distributions = await db.distributions.find({
-            "project_id": p["project_id"],
-            "investor_distributions.investor_id": user["id"]
-        }).to_list(100)
+        user_distributions = distributions_map.get(p["project_id"], [])
         
         dist_total = 0
         for d in user_distributions:
@@ -1112,8 +1163,19 @@ async def get_investor_dashboard(user: dict = Depends(get_current_user)):
         "investor_distributions.investor_id": user["id"]
     }).sort("created_at", -1).limit(5).to_list(5)
     
+    # Batch fetch projects for distributions
+    dist_project_ids = list(set([d["project_id"] for d in distributions]))
+    if dist_project_ids:
+        dist_projects = await db.projects.find(
+            {"id": {"$in": dist_project_ids}},
+            {"id": 1, "name": 1, "_id": 0}
+        ).to_list(100)
+        dist_projects_map = {p["id"]: p for p in dist_projects}
+    else:
+        dist_projects_map = {}
+    
     for d in distributions:
-        project = await db.projects.find_one({"id": d["project_id"]})
+        project = dist_projects_map.get(d["project_id"])
         user_dist = next((i for i in d["investor_distributions"] if i["investor_id"] == user["id"]), None)
         if user_dist:
             recent_activity.append({
@@ -1123,23 +1185,36 @@ async def get_investor_dashboard(user: dict = Depends(get_current_user)):
                 "date": d["created_at"]
             })
     
-    # Active votes
+    # Active votes - optimized with batch queries
     open_votes = await db.votes.find({"status": "open"}).to_list(10)
     vote_notices = []
-    for v in open_votes:
-        project = await db.projects.find_one({"id": v["project_id"]})
-        # Check if user has stake in this project
-        cap_table = await db.cap_tables.find_one({"project_id": v["project_id"]})
-        if cap_table:
-            has_stake = any(e["investor_id"] == user["id"] for e in cap_table.get("entries", []))
-            if has_stake:
-                vote_notices.append({
-                    "vote_id": v["id"],
-                    "project_name": project["name"] if project else "Unknown",
-                    "title": v["resolution_title"],
-                    "deadline": v["voting_deadline"],
-                    "has_voted": any(vote["investor_id"] == user["id"] for vote in v.get("votes", []))
-                })
+    
+    if open_votes:
+        vote_project_ids = list(set([v["project_id"] for v in open_votes]))
+        
+        # Batch fetch projects and cap_tables for votes
+        vote_projects = await db.projects.find(
+            {"id": {"$in": vote_project_ids}},
+            {"id": 1, "name": 1, "_id": 0}
+        ).to_list(100)
+        vote_projects_map = {p["id"]: p for p in vote_projects}
+        
+        vote_cap_tables = await db.cap_tables.find({"project_id": {"$in": vote_project_ids}}).to_list(100)
+        vote_cap_tables_map = {c["project_id"]: c for c in vote_cap_tables}
+        
+        for v in open_votes:
+            project = vote_projects_map.get(v["project_id"])
+            cap_table = vote_cap_tables_map.get(v["project_id"])
+            if cap_table:
+                has_stake = any(e["investor_id"] == user["id"] for e in cap_table.get("entries", []))
+                if has_stake:
+                    vote_notices.append({
+                        "vote_id": v["id"],
+                        "project_name": project["name"] if project else "Unknown",
+                        "title": v["resolution_title"],
+                        "deadline": v["voting_deadline"],
+                        "has_voted": any(vote["investor_id"] == user["id"] for vote in v.get("votes", []))
+                    })
     
     return {
         "summary": portfolio["summary"],
