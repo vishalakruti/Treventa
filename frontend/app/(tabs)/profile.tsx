@@ -132,6 +132,20 @@ export default function ProfileScreen() {
           </View>
         </View>
 
+        {/* Admin Panel Link - Only for Admins */}
+        {user && ['super_admin', 'finance_admin', 'project_manager'].includes(user.role) && (
+          <TouchableOpacity style={styles.adminCard} onPress={() => router.push('/(admin)')}>
+            <View style={styles.adminIcon}>
+              <Ionicons name="shield" size={24} color="#E53E3E" />
+            </View>
+            <View style={styles.adminInfo}>
+              <Text style={styles.adminTitle}>Admin Panel</Text>
+              <Text style={styles.adminDesc}>Manage users, ventures & more</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={20} color="#E53E3E" />
+          </TouchableOpacity>
+        )}
+
         {/* Menu Items */}
         <View style={styles.menuCard}>
           <TouchableOpacity style={styles.menuItem} onPress={() => router.push('/onboarding')}>
@@ -278,6 +292,38 @@ const styles = StyleSheet.create({
   statusValue: {
     fontSize: 14,
     fontWeight: '700',
+  },
+  adminCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(229,62,62,0.1)',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(229,62,62,0.3)',
+  },
+  adminIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: 'rgba(229,62,62,0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  adminInfo: {
+    flex: 1,
+  },
+  adminTitle: {
+    color: '#E53E3E',
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  adminDesc: {
+    color: '#A0AEC0',
+    fontSize: 12,
+    marginTop: 2,
   },
   sectionCard: {
     backgroundColor: '#1A2332',
