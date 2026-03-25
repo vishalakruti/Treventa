@@ -5,6 +5,7 @@ from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 import os
 import logging
+import sys
 from pathlib import Path
 from pydantic import BaseModel, Field, EmailStr
 from typing import List, Optional, Dict, Any
@@ -16,28 +17,111 @@ import base64
 import random
 import string
 
+# ==================== LOGGING SETUP ====================
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(sys.stdout)
+    ]
+)
+logger = logging.getLogger("TREVENTA")
+
+# ==================== ENVIRONMENT CONFIGURATION ====================
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
-# MongoDB connection
-mongo_url = os.environ['MONGO_URL']
-client = AsyncIOMotorClient(mongo_url)
-db = client[os.environ.get('DB_NAME', 'treventa_db')]
+logger.info("=" * 50)
+logger.info("TREVENTA VENTURES - Server Starting...")
+logger.info("=" * 50)
 
-# JWT Configuration
-SECRET_KEY = os.environ.get('SECRET_KEY')
-if not SECRET_KEY:
-    raise ValueError("SECRET_KEY environment variable must be set")
+# MongoDB Configuration with safe fallback
+MONGO_URL = os.getenv("MONGO_URL", "mongodb://localhost:27017")
+DB_NAME = os.getenv("DB_NAME", "treventa_db")
+logger.info(f"Mongo URL present: {bool(MONGO_URL)}")
+logger.info(f"Database name: {DB_NAME}")
+
+# JWT Configuration with safe fallback
+# WARNING: In production, always set SECRET_KEY via environment variable!
+DEFAULT_SECRET_KEY = "development-only-secret-key-change-in-production"
+SECRET_KEY = os.getenv("SECRET_KEY", DEFAULT_SECRET_KEY)
+USING_DEFAULT_SECRET = SECRET_KEY == DEFAULT_SECRET_KEY
+
+if USING_DEFAULT_SECRET:
+    logger.warning("!!! WARNING: Using default SECRET_KEY. Set SECRET_KEY env var in production! !!!")
+else:
+    logger.info("Using custom SECRET_KEY from environment")
+
+logger.info(f"Using default SECRET_KEY: {USING_DEFAULT_SECRET}")
+
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24  # 24 hours
 
-# Password hashing
+# Port configuration for AWS/production
+PORT = int(os.getenv("PORT", 8001))
+logger.info(f"Server will bind to port: {PORT}")
+
+# ==================== DATABASE CONNECTION (NON-BLOCKING) ====================
+client = None
+db = None
+db_connected = False
+
+def init_database():
+    """Initialize MongoDB connection with timeout and error handling.
+    Non-blocking: Server continues running even if DB connection fails."""
+    global client, db, db_connected
+    
+    try:
+        logger.info("Attempting MongoDB connection...")
+        # Connection with timeout (5 seconds)
+        client = AsyncIOMotorClient(
+            MONGO_URL,
+            serverSelectionTimeoutMS=5000,
+            connectTimeoutMS=5000,
+            socketTimeoutMS=5000
+        )
+        db = client[DB_NAME]
+        db_connected = True
+        logger.info("MongoDB connection established successfully")
+        logger.info(f"Connected to database: {DB_NAME}")
+    except Exception as e:
+        db_connected = False
+        logger.error(f"MongoDB connection failed: {str(e)}")
+        logger.warning("Server will continue running. DB-dependent endpoints will fail.")
+
+# Initialize database connection (non-blocking)
+init_database()
+
+# ==================== PASSWORD HASHING ====================
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 security = HTTPBearer()
 
-# Create the main app
-app = FastAPI(title="TREVENTA VENTURES API")
+# ==================== FASTAPI APP ====================
+app = FastAPI(
+    title="TREVENTA VENTURES API",
+    description="Institutional-grade private capital transparency and venture participation platform",
+    version="1.0.0"
+)
 api_router = APIRouter(prefix="/api")
+
+# ==================== CORS MIDDLEWARE ====================
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Allow all origins (configure for production)
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# ==================== DATABASE DEPENDENCY ====================
+async def require_db():
+    """Dependency to check if database is available"""
+    if not db_connected or db is None:
+        raise HTTPException(
+            status_code=503,
+            detail="Database connection unavailable. Please try again later."
+        )
+    return db
 
 # ==================== MODELS ====================
 
@@ -205,6 +289,8 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
 async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
+    if not db_connected or db is None:
+        raise HTTPException(status_code=503, detail="Database connection unavailable")
     try:
         token = credentials.credentials
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
@@ -230,6 +316,9 @@ async def require_super_admin(user: dict = Depends(get_current_user)):
 
 async def log_audit(action: str, user_id: str, resource_type: str, resource_id: str, details: dict = None):
     """Create immutable audit log entry"""
+    if not db_connected or db is None:
+        logger.warning(f"Audit log skipped (no DB): {action} by {user_id}")
+        return
     audit_entry = {
         "id": str(uuid.uuid4()),
         "action": action,
@@ -242,11 +331,35 @@ async def log_audit(action: str, user_id: str, resource_type: str, resource_id: 
     }
     await db.audit_logs.insert_one(audit_entry)
 
+# ==================== ROOT HEALTH CHECK ====================
+
+@app.get("/")
+async def root_health():
+    """Root health check endpoint for AWS/load balancers"""
+    return {
+        "status": "running",
+        "service": "TREVENTA VENTURES API",
+        "version": "1.0.0",
+        "database_connected": db_connected
+    }
+
+@app.get("/health")
+async def detailed_health():
+    """Detailed health check"""
+    return {
+        "status": "healthy" if db_connected else "degraded",
+        "database": "connected" if db_connected else "disconnected",
+        "timestamp": datetime.utcnow().isoformat(),
+        "using_default_secret": USING_DEFAULT_SECRET
+    }
+
 # ==================== AUTH ROUTES ====================
 
 @api_router.post("/auth/request-invite")
 async def request_invite(request: RequestInvite):
     """Public endpoint to request an invite"""
+    if not db_connected or db is None:
+        raise HTTPException(status_code=503, detail="Database connection unavailable")
     existing = await db.invite_requests.find_one({"email": request.email})
     if existing:
         raise HTTPException(status_code=400, detail="Invite request already submitted")
@@ -266,6 +379,8 @@ async def request_invite(request: RequestInvite):
 @api_router.post("/auth/register", response_model=dict)
 async def register(user_data: UserCreate):
     """Register with invite code"""
+    if not db_connected or db is None:
+        raise HTTPException(status_code=503, detail="Database connection unavailable")
     # Validate invite code
     invite = await db.invites.find_one({"code": user_data.invite_code, "used": False})
     if not invite:
@@ -311,6 +426,8 @@ async def register(user_data: UserCreate):
 @api_router.post("/auth/login")
 async def login(credentials: UserLogin):
     """Login and get OTP sent (mocked)"""
+    if not db_connected or db is None:
+        raise HTTPException(status_code=503, detail="Database connection unavailable")
     user = await db.users.find_one({"email": credentials.email.lower()})
     if not user or not verify_password(credentials.password, user["password_hash"]):
         raise HTTPException(status_code=401, detail="Invalid credentials")
@@ -340,6 +457,8 @@ async def login(credentials: UserLogin):
 @api_router.post("/auth/verify-otp", response_model=TokenResponse)
 async def verify_otp(data: OTPVerify):
     """Verify OTP and get access token"""
+    if not db_connected or db is None:
+        raise HTTPException(status_code=503, detail="Database connection unavailable")
     user = await db.users.find_one({"email": data.email.lower()})
     if not user:
         raise HTTPException(status_code=401, detail="Invalid email")
@@ -1245,6 +1364,9 @@ async def get_audit_logs(
 @api_router.post("/seed/demo-data")
 async def seed_demo_data():
     """Seed demo data for testing"""
+    if not db_connected or db is None:
+        raise HTTPException(status_code=503, detail="Database connection unavailable")
+    
     # Create super admin
     admin_id = str(uuid.uuid4())
     admin = {
@@ -1357,34 +1479,49 @@ async def seed_demo_data():
         "demo_invite_code": "DEMO2025"
     }
 
-# ==================== ROOT & HEALTH ====================
+# ==================== API ROUTER HEALTH CHECK ====================
 
 @api_router.get("/")
-async def root():
+async def api_root():
     return {"message": "TREVENTA VENTURES API", "version": "1.0.0"}
 
 @api_router.get("/health")
-async def health_check():
-    return {"status": "healthy", "timestamp": datetime.utcnow()}
+async def api_health_check():
+    return {
+        "status": "healthy" if db_connected else "degraded",
+        "database": "connected" if db_connected else "disconnected",
+        "timestamp": datetime.utcnow()
+    }
 
-# Include router
+# ==================== INCLUDE ROUTER ====================
 app.include_router(api_router)
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_credentials=True,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# ==================== STARTUP & SHUTDOWN EVENTS ====================
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger(__name__)
+@app.on_event("startup")
+async def startup_event():
+    logger.info("=" * 50)
+    logger.info("TREVENTA VENTURES API - STARTUP COMPLETE")
+    logger.info(f"Database connected: {db_connected}")
+    logger.info(f"Using default SECRET_KEY: {USING_DEFAULT_SECRET}")
+    logger.info(f"Server running on port: {PORT}")
+    logger.info("=" * 50)
 
 @app.on_event("shutdown")
 async def shutdown_db_client():
-    client.close()
+    logger.info("Shutting down TREVENTA VENTURES API...")
+    if client:
+        client.close()
+        logger.info("MongoDB connection closed")
+
+# ==================== MAIN ENTRY POINT ====================
+if __name__ == "__main__":
+    import uvicorn
+    logger.info(f"Starting uvicorn server on 0.0.0.0:{PORT}")
+    uvicorn.run(
+        "server:app",
+        host="0.0.0.0",
+        port=PORT,
+        reload=False,  # Set to True for development
+        workers=1  # Increase for production (e.g., 2-4)
+    )
