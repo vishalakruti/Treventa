@@ -17,19 +17,44 @@ import base64
 import random
 import string
 
+# ==================== DIRECTORY SETUP ====================
+ROOT_DIR = Path(__file__).parent
+LOGS_DIR = ROOT_DIR / "logs"
+
+# Create logs directory if it doesn't exist (for file logging support)
+try:
+    LOGS_DIR.mkdir(exist_ok=True)
+except Exception as e:
+    pass  # Will use stdout only if logs dir creation fails
+
 # ==================== LOGGING SETUP ====================
+log_handlers = [logging.StreamHandler(sys.stdout)]
+
+# Add file handler if logs directory exists
+log_file = LOGS_DIR / "app.log"
+try:
+    if LOGS_DIR.exists():
+        file_handler = logging.FileHandler(log_file)
+        file_handler.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
+        log_handlers.append(file_handler)
+except Exception as e:
+    pass  # File logging optional, continue with stdout
+
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.StreamHandler(sys.stdout)
-    ]
+    handlers=log_handlers
 )
 logger = logging.getLogger("TREVENTA")
 
 # ==================== ENVIRONMENT CONFIGURATION ====================
-ROOT_DIR = Path(__file__).parent
-load_dotenv(ROOT_DIR / '.env')
+# Load .env file if it exists (non-blocking if missing)
+env_file = ROOT_DIR / '.env'
+if env_file.exists():
+    load_dotenv(env_file)
+    logger.info(".env file loaded successfully")
+else:
+    logger.warning(".env file not found - using environment variables or defaults")
 
 logger.info("=" * 50)
 logger.info("TREVENTA VENTURES - Server Starting...")
@@ -57,8 +82,8 @@ logger.info(f"Using default SECRET_KEY: {USING_DEFAULT_SECRET}")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24  # 24 hours
 
-# Port configuration for AWS/production
-PORT = int(os.getenv("PORT", 8001))
+# Port configuration for AWS/production (default 8000 for standard deployment)
+PORT = int(os.getenv("PORT", 8000))
 logger.info(f"Server will bind to port: {PORT}")
 
 # ==================== DATABASE CONNECTION (NON-BLOCKING) ====================
@@ -340,7 +365,8 @@ async def root_health():
         "status": "running",
         "service": "TREVENTA VENTURES API",
         "version": "1.0.0",
-        "database_connected": db_connected
+        "database_connected": db_connected,
+        "port": PORT
     }
 
 @app.get("/health")
@@ -349,8 +375,10 @@ async def detailed_health():
     return {
         "status": "healthy" if db_connected else "degraded",
         "database": "connected" if db_connected else "disconnected",
+        "port": PORT,
         "timestamp": datetime.utcnow().isoformat(),
-        "using_default_secret": USING_DEFAULT_SECRET
+        "using_default_secret": USING_DEFAULT_SECRET,
+        "logs_dir": str(LOGS_DIR) if LOGS_DIR.exists() else "not_available"
     }
 
 # ==================== AUTH ROUTES ====================
@@ -1517,6 +1545,10 @@ async def shutdown_db_client():
 # ==================== MAIN ENTRY POINT ====================
 if __name__ == "__main__":
     import uvicorn
+    
+    # Ensure logs directory exists for direct execution
+    LOGS_DIR.mkdir(exist_ok=True)
+    
     logger.info(f"Starting uvicorn server on 0.0.0.0:{PORT}")
     uvicorn.run(
         "server:app",
