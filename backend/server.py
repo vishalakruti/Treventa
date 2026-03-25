@@ -371,14 +371,11 @@ async def root_health():
 
 @app.get("/health")
 async def detailed_health():
-    """Detailed health check"""
+    """Quick debug route - exact format for deployment verification"""
     return {
-        "status": "healthy" if db_connected else "degraded",
-        "database": "connected" if db_connected else "disconnected",
+        "status": "ok",
         "port": PORT,
-        "timestamp": datetime.utcnow().isoformat(),
-        "using_default_secret": USING_DEFAULT_SECRET,
-        "logs_dir": str(LOGS_DIR) if LOGS_DIR.exists() else "not_available"
+        "mongo": db_connected
     }
 
 # ==================== AUTH ROUTES ====================
