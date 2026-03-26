@@ -1,105 +1,238 @@
-# TREVANTA VENTURES - Backend Deployment Guide
+# Trevanta Ventures - AWS EC2 Deployment Guide
 
-## Quick Start (1-Command Deployment)
+## System Architecture
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                      AWS EC2 Instance                        │
+├─────────────────────────────────────────────────────────────┤
+│  Frontend (React)          Backend (FastAPI)                │
+│  Port: 3000                Port: 8000                       │
+│  serve -s dist             uvicorn server:app               │
+└─────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+                    MongoDB Atlas / Local
+```
+
+## Quick Deployment (30 minutes)
+
+### Prerequisites
 
 ```bash
-git clone <repo>
+# Install Node.js 20+
+curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+sudo apt-get install -y nodejs
+
+# Install Python 3.9+
+sudo apt-get install -y python3 python3-pip python3-venv
+
+# Install serve (for frontend)
+sudo npm install -g serve
+```
+
+### Step 1: Clone Repository
+
+```bash
+git clone <your-repo>
+cd trevanta-ventures
+```
+
+### Step 2: Backend Setup
+
+```bash
 cd backend
+
+# Create virtual environment
+python3 -m venv venv
+source venv/bin/activate
+
+# Install dependencies
 pip install -r requirements.txt
-bash start.sh
-```
 
-## Environment Setup
-
-1. Copy `.env.example` to `.env`:
-```bash
+# Configure environment
 cp .env.example .env
+nano .env
 ```
 
-2. Configure the following in `.env`:
+**Edit `.env`:**
 ```env
-MONGO_URL="mongodb+srv://<user>:<pass>@cluster.mongodb.net/?retryWrites=true&w=majority"
-DB_NAME="treventa_db"
-SECRET_KEY="<generate-with-openssl-rand-hex-32>"
+MONGO_URL="mongodb+srv://USER:PASS@cluster.mongodb.net/?retryWrites=true&w=majority"
+DB_NAME="trevanta_db"
+SECRET_KEY="<generate-with: openssl rand -hex 32>"
 PORT=8000
 ```
 
-## Available Scripts
+### Step 3: Start Backend
 
-### Foreground Start (Development)
 ```bash
 bash start.sh
 ```
 
-### Background Start (Production)
+**Verify:**
 ```bash
-bash start-background.sh
+curl http://localhost:8000/
+# Should return: {"status":"running","port":8000,"database_connected":true}
 ```
 
-### Stop Server
+### Step 4: Frontend Setup
+
 ```bash
-bash stop.sh
+cd ../frontend
+
+# Configure environment
+nano .env
 ```
 
-### Manual Start with nohup
-```bash
-nohup uvicorn server:app --host 0.0.0.0 --port 8000 --workers 2 > logs/app.log 2>&1 &
+**Edit `.env`:**
+```env
+VITE_API_URL=http://YOUR_EC2_PUBLIC_IP:8000
 ```
 
-## Health Checks
+### Step 5: Build & Serve Frontend
+
+```bash
+npm install
+npm run build
+serve -s dist -l 3000 &
+```
+
+### Step 6: Configure Security Group
+
+In AWS Console → EC2 → Security Groups:
+
+| Type | Port | Source |
+|------|------|--------|
+| HTTP | 80   | 0.0.0.0/0 |
+| Custom TCP | 3000 | 0.0.0.0/0 |
+| Custom TCP | 8000 | 0.0.0.0/0 |
+
+### Step 7: Access Application
+
+Open: `http://YOUR_EC2_PUBLIC_IP:3000`
+
+**Test Credentials:**
+- Email: admin@treventa.com
+- Password: admin123
+- OTP: Displayed in UI
+
+---
+
+## Backend Reference
+
+### Health Check Endpoints
 
 | Endpoint | Description |
 |----------|-------------|
-| `GET /` | Basic health check (for load balancers) |
-| `GET /health` | Detailed health with DB status, port, logs dir |
-| `GET /api/health` | API-level health check |
+| `GET /` | Basic health |
+| `GET /health` | Detailed status |
+| `GET /api/health` | API health |
 
-## Logs
+### Start Commands
 
-- Console logs: stdout (always)
-- File logs: `logs/app.log` (auto-created)
-- Background logs: `logs/nohup.log` (when using start-background.sh)
+```bash
+# Foreground
+bash start.sh
 
-## AWS EC2 Deployment
+# Background
+bash start-background.sh
 
-1. Launch EC2 instance (Amazon Linux 2 / Ubuntu)
-2. Install Python 3.9+:
-   ```bash
-   sudo yum install python3 python3-pip  # Amazon Linux
-   # or
-   sudo apt install python3 python3-pip  # Ubuntu
-   ```
-3. Clone repository
-4. Configure `.env` with MongoDB Atlas connection
-5. Run: `bash start-background.sh`
-6. Configure security group to allow port 8000
+# Stop
+bash stop.sh
 
-## Features
+# Manual
+uvicorn server:app --host 0.0.0.0 --port 8000 --workers 2
+```
 
-- **Non-blocking startup**: Server runs even if MongoDB fails
-- **Graceful degradation**: DB-dependent endpoints return 503, others work
-- **File + Console logging**: Dual logging for debugging
-- **Auto-creates directories**: logs/ created automatically
-- **No hard failures**: Missing .env uses defaults with warnings
+### Logs
+
+```bash
+# Application logs
+tail -f logs/app.log
+
+# Background logs
+tail -f logs/nohup.log
+```
+
+---
+
+## Frontend Reference
+
+### Build Commands
+
+```bash
+# Development
+npm run dev
+
+# Production build
+npm run build
+
+# Serve production
+serve -s dist -l 3000
+```
+
+### Environment Variables
+
+```env
+# Required
+VITE_API_URL=http://YOUR_SERVER:8000
+```
+
+---
 
 ## Troubleshooting
 
-### Check if server is running
+### Backend won't start
+
 ```bash
-curl http://localhost:8000/
+# Check if port is in use
+lsof -i :8000
+
+# Kill existing process
+bash stop.sh
+
+# Check logs
+tail -20 logs/app.log
 ```
 
-### View logs
+### Frontend API errors
+
 ```bash
-tail -f logs/app.log
+# Verify VITE_API_URL
+cat frontend/.env
+
+# Rebuild with correct URL
+cd frontend
+npm run build
 ```
 
-### Check process
+### MongoDB connection failed
+
 ```bash
-ps aux | grep uvicorn
+# Check MongoDB URL
+cat backend/.env | grep MONGO
+
+# Test connection
+curl http://localhost:8000/health
 ```
 
-### Stop all uvicorn processes
-```bash
-pkill -f 'uvicorn server:app'
-```
+---
+
+## Port Summary
+
+| Service | Port | Notes |
+|---------|------|-------|
+| Frontend | 3000 | React app |
+| Backend | 8000 | FastAPI |
+| MongoDB | 27017 | Local only |
+
+---
+
+## Production Checklist
+
+- [ ] MongoDB Atlas configured
+- [ ] SECRET_KEY generated (not default)
+- [ ] VITE_API_URL set to public IP
+- [ ] Security group ports open
+- [ ] SSL/HTTPS configured (optional)
+- [ ] Demo data seeded: `curl -X POST http://localhost:8000/api/seed/demo-data`
