@@ -1,4 +1,4 @@
-# TREVENTA VENTURES - Backend Deployment Guide
+# TREVANTA VENTURES - Backend Deployment Guide
 
 ## Quick Start (1-Command Deployment)
 

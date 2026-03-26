@@ -1,6 +1,6 @@
 #!/bin/bash
 # ==========================================
-# TREVENTA VENTURES - Stop Server Script
+# TREVANTA VENTURES - Stop Server Script
 # ==========================================
 
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"

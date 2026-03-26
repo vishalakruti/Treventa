@@ -1,6 +1,6 @@
 #!/bin/bash
 # ==========================================
-# TREVENTA VENTURES - Background Startup
+# TREVANTA VENTURES - Background Startup
 # ==========================================
 # Starts the backend in background with nohup
 # Logs saved to logs/nohup.log
@@ -14,7 +14,7 @@ cd "$SCRIPT_DIR"
 echo "Creating logs directory..."
 mkdir -p logs
 
-echo "Starting Treventa Backend in background..."
+echo "Starting Trevanta Backend in background..."
 echo "Logs will be saved to: logs/nohup.log"
 echo "To stop: kill \$(cat logs/server.pid)"
 

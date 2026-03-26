@@ -1,6 +1,6 @@
 #!/bin/bash
 # ==========================================
-# TREVENTA VENTURES - Backend Startup Script
+# TREVANTA VENTURES - Backend Startup Script
 # ==========================================
 # Usage: bash start.sh
 # Runs server in BACKGROUND automatically
@@ -15,7 +15,7 @@ PID_FILE="logs/server.pid"
 LOG_FILE="logs/app.log"
 
 echo "========================================="
-echo "TREVENTA VENTURES - Backend Deployment"
+echo "TREVANTA VENTURES - Backend Deployment"
 echo "========================================="
 
 # 1. Create logs directory (safe)
@@ -80,7 +80,7 @@ echo "Starting server on port $PORT..."
 echo "========================================="
 
 # 6. Start server in background
-echo "[$(date)] Starting Treventa Backend on port $PORT" >> "$LOG_FILE"
+echo "[$(date)] Starting Trevanta Backend on port $PORT" >> "$LOG_FILE"
 nohup python3 -m uvicorn server:app --host 0.0.0.0 --port "$PORT" --workers 2 >> "$LOG_FILE" 2>&1 &
 SERVER_PID=$!
 

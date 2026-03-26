@@ -45,7 +45,7 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=log_handlers
 )
-logger = logging.getLogger("TREVENTA")
+logger = logging.getLogger("TREVANTA")
 
 # ==================== ENVIRONMENT CONFIGURATION ====================
 # Load .env file if it exists (non-blocking if missing)
@@ -57,7 +57,7 @@ else:
     logger.warning(".env file not found - using environment variables or defaults")
 
 logger.info("=" * 50)
-logger.info("TREVENTA VENTURES - Server Starting...")
+logger.info("TREVANTA VENTURES - Server Starting...")
 logger.info("=" * 50)
 
 # MongoDB Configuration with safe fallback
@@ -123,7 +123,7 @@ security = HTTPBearer()
 
 # ==================== FASTAPI APP ====================
 app = FastAPI(
-    title="TREVENTA VENTURES API",
+    title="TREVANTA VENTURES API",
     description="Institutional-grade private capital transparency and venture participation platform",
     version="1.0.0"
 )
@@ -363,7 +363,7 @@ async def root_health():
     """Root health check endpoint for AWS/load balancers"""
     return {
         "status": "running",
-        "service": "TREVENTA VENTURES API",
+        "service": "TREVANTA VENTURES API",
         "version": "1.0.0",
         "database_connected": db_connected,
         "port": PORT
@@ -1508,7 +1508,7 @@ async def seed_demo_data():
 
 @api_router.get("/")
 async def api_root():
-    return {"message": "TREVENTA VENTURES API", "version": "1.0.0"}
+    return {"message": "TREVANTA VENTURES API", "version": "1.0.0"}
 
 @api_router.get("/health")
 async def api_health_check():
@@ -1526,7 +1526,7 @@ app.include_router(api_router)
 @app.on_event("startup")
 async def startup_event():
     logger.info("=" * 50)
-    logger.info("TREVENTA VENTURES API - STARTUP COMPLETE")
+    logger.info("TREVANTA VENTURES API - STARTUP COMPLETE")
     logger.info(f"Database connected: {db_connected}")
     logger.info(f"Using default SECRET_KEY: {USING_DEFAULT_SECRET}")
     logger.info(f"Server running on port: {PORT}")
@@ -1534,7 +1534,7 @@ async def startup_event():
 
 @app.on_event("shutdown")
 async def shutdown_db_client():
-    logger.info("Shutting down TREVENTA VENTURES API...")
+    logger.info("Shutting down TREVANTA VENTURES API...")
     if client:
         client.close()
         logger.info("MongoDB connection closed")
